@@ -85,6 +85,8 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 .client-presets { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 10px; }
 .client-presets button { border: 1px solid var(--line); background: var(--blue-soft); color: var(--blue); font: 600 12px 'Segoe UI'; padding: 8px 6px; border-radius: 7px; cursor: pointer; line-height: 1.25; }
 .client-presets button:hover { border-color: var(--blue-mid); }
+.client-presets button { position: relative; }
+.client-presets button.add { background: #fff; border-style: dashed; border-color: var(--blue-mid); font-weight: 700; }
 .client-presets button.sel { background: var(--blue); color: #fff; border-color: var(--blue); }
 .blue-th { background: var(--blue-mid); color: #fff; font-size: 12px; font-weight: 700; text-align: center; padding: 6px; text-transform: uppercase; letter-spacing: .04em; }
 .p-meta table { width: 100%; border-collapse: collapse; }
@@ -102,6 +104,8 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 .desc td { border-bottom: 1px solid #E6EAF0; padding: 8px 10px; font-size: 13px; }
 .desc td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
 .desc tr.empty td { color: transparent; }
+.desc tr.empty td.hand-desc { color: var(--ink); outline: none; cursor: text; }
+.desc tr.empty td.hand-desc:empty::before { content: "\00a0"; }
 .p-bottom { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 18px; gap: 20px; flex-wrap: wrap; }
 .p-merci { color: var(--blue-mid); font-weight: 700; font-style: italic; font-size: 15px; }
 .p-tax-ids { font-size: 12px; margin-top: 10px; line-height: 1.7; }
@@ -133,7 +137,6 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
   <div class="t-actions">
     <span class="sync-dot" id="syncStatus" onclick="syncClick()">● Local</span>
     <button class="btn btn-ghost on" id="tabFact" onclick="showView('facture')">Facture</button>
-    <button class="btn btn-ghost" id="tabEC" onclick="showView('etat')">État de compte</button>
     <button class="btn btn-ghost" onclick="nouvelleFacture()">Nouvelle facture</button>
     <button class="btn btn-ghost" onclick="doPrint()">🖨 Imprimer</button>
     <button class="btn btn-blue" onclick="doSave()">💾 Enregistrer en PDF</button>
@@ -145,6 +148,7 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
     <div class="seg">
       <button id="segEst" onclick="setType('ESTIMATION')">Estimation</button>
       <button id="segRecu" class="on" onclick="setType('REÇU')">Reçu</button>
+      <button id="segLav" onclick="setType('LAVE-AUTO')">Lave-auto</button>
     </div>
 
     <div class="frow">
@@ -154,9 +158,12 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 
     <div class="fsection">Facturé à</div>
     <div class="client-presets" id="clientPresets"></div>
+
     <div class="fgroup"><label>Nom du client / concessionnaire</label><input id="fClient" placeholder="H GREGOIRE MITSUBISHI LAVAL" oninput="clearPresetSel(); paint()" /></div>
     <div class="fgroup"><label>Adresse du client</label><textarea id="fClientAddr" rows="2" placeholder="2465 BOUL. DU CURÉ-LABELLE&#10;LAVAL QC, H7T 1R3" oninput="clearPresetSel(); paint()"></textarea></div>
+    <div class="fgroup"><label>Téléphone du client</label><input id="fClientTel" placeholder="(450) 555-1234" oninput="clearPresetSel(); paint()" /></div>
 
+    <div id="vehSection">
     <div class="fsection">Véhicule</div>
     <div class="frow">
       <div class="fgroup"><label>Marque</label><input id="fMarque" placeholder="MITSUBISHI" oninput="paint()" /></div>
@@ -170,6 +177,7 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
     <div class="frow">
       <div class="fgroup"><label>Stock #</label><input id="fStock" placeholder="M250151" oninput="paint()" /></div>
       <div class="fgroup"><label>Serial (NIV)</label><input id="fSerial" placeholder="SZ604480" oninput="paint()" /></div>
+    </div>
     </div>
 
     <div class="fsection">Travaux effectués</div>
@@ -188,21 +196,6 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
   </div>
 </div>
 
-<div class="wrap" id="viewEtat" style="display:none">
-  <div class="form-card">
-    <div class="fsection">État de compte</div>
-    <div class="fgroup"><label>Client</label><select id="ecClient" onchange="paintEC()"></select></div>
-    <div class="fgroup"><label>Mois</label><input type="month" id="ecMois" onchange="paintEC()" /></div>
-    <div style="display:flex; gap:8px; margin-top:12px">
-      <button class="btn btn-blue" style="flex:1.4; font-size:15px" onclick="doSave()">💾 Enregistrer en PDF</button>
-      <button class="btn" style="flex:1; font-size:15px; background:#fff; border:1px solid var(--line)" onclick="doPrint()">🖨 Imprimer</button>
-    </div>
-    <div class="fsection">Reçus enregistrés (ce mois, ce client)</div>
-    <div id="ecList"></div>
-    <div class="hint">Chaque facture que tu enregistres en PDF ou imprimes s'ajoute ici automatiquement. Le ✕ retire une facture de l'historique (en cas d'erreur).</div>
-  </div>
-  <div class="paper-zone" id="ecPages" style="flex-direction:column; align-items:center; gap:16px"></div>
-</div>
 <div class="login-overlay" id="loginModal" style="display:none">
   <div class="login-card">
     <h3>Connexion — Factures CP</h3>
@@ -641,21 +634,40 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var r,n,i,a,
 </script>
 <script>
 /* ——— Enregistrer en PDF (téléchargement direct) ——— */
+/* Format fixe : 820 x 1061 px = proportions exactes d'une page Lettre (8,5 x 11).
+   Toutes les factures sortent donc identiques, peu importe le nombre de lignes. */
+const PAPER_W = 820, PAPER_H = 1061;
+
+function lockPaper(el) {
+  const prev = { width: el.style.width, minHeight: el.style.minHeight, maxWidth: el.style.maxWidth };
+  el.style.width = PAPER_W + "px";
+  el.style.maxWidth = PAPER_W + "px";
+  el.style.minHeight = PAPER_H + "px";
+  return prev;
+}
+function unlockPaper(el, prev) {
+  el.style.width = prev.width;
+  el.style.maxWidth = prev.maxWidth;
+  el.style.minHeight = prev.minHeight;
+}
+
 async function savePDF(paperId, filename) {
   const paper = document.getElementById(paperId || "paper");
+  const prev = lockPaper(paper);
   try {
-    const canvas = await html2canvas(paper, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
+    const canvas = await html2canvas(paper, { scale: 2, backgroundColor: "#ffffff", useCORS: true, windowWidth: 1200 });
     const pdf = new jspdf.jsPDF({ unit: "pt", format: "letter", orientation: "portrait" });
     const pageW = pdf.internal.pageSize.getWidth();
     const pageH = pdf.internal.pageSize.getHeight();
     const margin = 24;
-    let w = pageW - margin * 2;
-    let h = (canvas.height / canvas.width) * w;
-    if (h > pageH - margin * 2) { h = pageH - margin * 2; w = (canvas.width / canvas.height) * h; }
-    pdf.addImage(canvas.toDataURL("image/jpeg", 0.95), "JPEG", (pageW - w) / 2, margin, w, h);
+    /* Toujours le même cadre : position et dimensions identiques à chaque fois */
+    pdf.addImage(canvas.toDataURL("image/jpeg", 0.95), "JPEG",
+                 margin, margin, pageW - margin * 2, pageH - margin * 2);
     pdf.save(filename || "document.pdf");
   } catch (e) {
     alert("Le téléchargement PDF n'a pas fonctionné ici. Utilise « Imprimer » puis choisis « Enregistrer au format PDF ».");
+  } finally {
+    unlockPaper(paper, prev);
   }
 }
 
@@ -669,12 +681,12 @@ async function savePDFPages(selector, filename) {
     const pageH = pdf.internal.pageSize.getHeight();
     const margin = 24;
     for (let i = 0; i < els.length; i++) {
-      const canvas = await html2canvas(els[i], { scale: 2, backgroundColor: "#ffffff", useCORS: true });
-      let w = pageW - margin * 2;
-      let h = (canvas.height / canvas.width) * w;
-      if (h > pageH - margin * 2) { h = pageH - margin * 2; w = (canvas.width / canvas.height) * h; }
+      const prev = lockPaper(els[i]);
+      const canvas = await html2canvas(els[i], { scale: 2, backgroundColor: "#ffffff", useCORS: true, windowWidth: 1200 });
+      unlockPaper(els[i], prev);
       if (i > 0) pdf.addPage();
-      pdf.addImage(canvas.toDataURL("image/jpeg", 0.95), "JPEG", (pageW - w) / 2, margin, w, h);
+      pdf.addImage(canvas.toDataURL("image/jpeg", 0.95), "JPEG",
+                   margin, margin, pageW - margin * 2, pageH - margin * 2);
     }
     pdf.save(filename || "document.pdf");
   } catch (e) {
@@ -691,9 +703,10 @@ const CO = {
   tps: "727153751",
   tvq: "1231686491",
   email: "CARROSSERIEPRINCIPALE@HOTMAIL.COM",
+  owner: "AYOUB LAKEHAL",
 };
 /* Clients réguliers — un clic remplit le nom et l'adresse */
-const CLIENTS = [
+let CLIENTS = [
   { nom: "HYUNDAI CHOMEDEY", addr: "3200 AUTOROUTE CHOMEDEY\nLAVAL, QC, H7X 0G1" },
   { nom: "H GREGOIRE MITSUBISHI LAVAL", addr: "2465 BOUL. DU CURE-LABELLE\nLAVAL QC, H7T 1R3" },
   { nom: "MITSUBISHI SAINT-EUSTACHE", addr: "292 RUE DUBOIS\nSAINT-EUSTACHE, QC, J7P 4W9" },
@@ -704,6 +717,11 @@ const fmt = (n) => n.toLocaleString("fr-CA", { minimumFractionDigits: 2, maximum
 
 let docType = "REÇU";
 let lines = [{ desc: "", bdt: "", stock: "", amt: "" }];
+let handDesc = {}; /* Texte écrit à la main directement dans les lignes vides du tableau (par ligne: d=description, b=BDR, s=stock, p=prix) */
+function setHand(j, key, val) {
+  if (!handDesc[j]) handDesc[j] = {};
+  handDesc[j][key] = val;
+}
 let counter = 2219; /* prochain numéro — modifiable dans le champ */
 
 const $ = (id) => document.getElementById(id);
@@ -719,27 +737,54 @@ function setType(t) {
   docType = t;
   $("segEst").classList.toggle("on", t === "ESTIMATION");
   $("segRecu").classList.toggle("on", t === "REÇU");
+  $("segLav").classList.toggle("on", t === "LAVE-AUTO");
+  $("vehSection").style.display = (t === "LAVE-AUTO") ? "none" : "";
+  renderLines();
   paint();
 }
 
 /* ——— Clients préenregistrés ——— */
+function clientAddrBlock(c) {
+  return c.addr !== undefined ? c.addr : [c.addr1, c.addr2].filter(Boolean).join("\n");
+}
+
 function renderPresets() {
   $("clientPresets").innerHTML = CLIENTS.map((c, i) =>
-    `<button type="button" id="preset${i}" onclick="pickClient(${i})">${esc(c.nom)}</button>`).join("");
+    `<button type="button" id="preset${i}" onclick="pickClient(${i})">${esc(c.nom)}</button>`).join("") +
+    `<button type="button" class="add" onclick="clientParticulier()">Client</button>`;
 }
+
 function pickClient(i) {
   $("fClient").value = CLIENTS[i].nom;
-  $("fClientAddr").value = CLIENTS[i].addr;
-  CLIENTS.forEach((_, j) => $("preset" + j).classList.toggle("sel", j === i));
+  $("fClientAddr").value = clientAddrBlock(CLIENTS[i]);
+  $("fClientTel").value = "";
+  CLIENTS.forEach((_, j) => { const b = $("preset" + j); if (b) b.classList.toggle("sel", j === i); });
   paint();
 }
 function clearPresetSel() {
-  CLIENTS.forEach((_, j) => $("preset" + j).classList.remove("sel"));
+  CLIENTS.forEach((_, j) => { const b = $("preset" + j); if (b) b.classList.remove("sel"); });
+}
+
+/* Client particulier : vide les cases pour que tu écrives à la main. Rien n'est enregistré. */
+function clientParticulier() {
+  $("fClient").value = "";
+  $("fClientAddr").value = "";
+  $("fClientTel").value = "";
+  clearPresetSel();
+  $("fClient").focus();
+  paint();
+}
+
+function loadClients() {
+  try {
+    const s = localStorage.getItem("cp_clients");
+    if (s) { const d = JSON.parse(s); if (Array.isArray(d) && d.length) CLIENTS = d; }
+  } catch (e) {}
 }
 
 /* ——— Lignes de travaux ——— */
-/* BDT/STOCK seulement pour H Grégoire Mitsubishi Laval */
-function isHG() { return $("fClient").value.toUpperCase().includes("H GREGOIRE MITSUBISHI"); }
+/* Colonnes BDR / STOCK : uniquement en mode Lave-auto */
+function isHG() { return docType === "LAVE-AUTO"; }
 let lastHG = null;
 
 function renderLines() {
@@ -750,7 +795,7 @@ function renderLines() {
         oninput="lines[${i}].desc=this.value; paint()" />
       <div class="sub" style="${hg ? "" : "grid-template-columns: 1fr 30px"}">
         ${hg ? `
-        <input placeholder="BDT" value="${esc(l.bdt || "")}"
+        <input placeholder="BDR" value="${esc(l.bdt || "")}"
           oninput="lines[${i}].bdt=this.value; paint()" />
         <input placeholder="STOCK" value="${esc(l.stock || "")}"
           oninput="lines[${i}].stock=this.value; paint()" />` : ""}
@@ -771,6 +816,7 @@ function paint() {
   const date = $("fDate").value;
   const client = $("fClient").value;
   const clientAddr = $("fClientAddr").value;
+  const clientTel = $("fClientTel").value;
   const vehG = [
     ["MARQUE", $("fMarque").value], ["MODELE", $("fModele").value],
     ["ANNEE", $("fAnnee").value], ["COULEUR", $("fCouleur").value],
@@ -794,7 +840,7 @@ function paint() {
         <div class="p-addr">${CO.addr1}<br>${CO.addr2}<br>${CO.tel}</div>
       </div>
       <div style="text-align:right">
-        <div class="p-doctype">${docType === "REÇU" ? "Reçu" : "Estimation"}</div>
+        <div class="p-doctype">${docType === "ESTIMATION" ? "Estimation" : "Reçu"}</div>
         <div class="p-meta">
           <table>
             <tr><th class="blue-th" style="width:55%">Facture #</th><th class="blue-th">Date</th></tr>
@@ -809,25 +855,33 @@ function paint() {
         <div class="blue-th">Facturé à</div>
         <div class="p-body"><b>NOM :</b> ${esc(client) || "—"}
 
-<b>ADRESSE :</b> ${esc(clientAddr) || "—"}</div>
+<b>ADRESSE :</b> ${esc(clientAddr) || "—"}${clientTel.trim() ? "\n\n<b>TÉL :</b> " + esc(clientTel) : ""}</div>
       </div>
-      <div class="p-col">
+      ${docType === "LAVE-AUTO" ? "" : `<div class="p-col">
         <div class="blue-th">Véhicule</div>
         <div class="veh-grid">
           <div>${vehG.length ? vehLine(vehG) : "—"}</div>
           <div>${vehLine(vehD)}</div>
         </div>
-      </div>
+      </div>`}
     </div>
 
     <table class="desc">
       ${hg
-        ? `<tr><th>Description</th><th class="c">BDT</th><th class="c">STOCK</th><th>Montant</th></tr>
+        ? `<tr><th>Description</th><th class="c">BDR</th><th class="c">STOCK #</th><th>Prix</th></tr>
       ${rows.map((l) => `<tr><td>${esc(l.desc.toUpperCase())}</td><td class="c">${esc((l.bdt || "").toUpperCase())}</td><td class="c">${esc((l.stock || "").toUpperCase())}</td><td>${fmt(parseFloat(String(l.amt).replace(",", ".")) || 0)}</td></tr>`).join("")}
-      ${Array(emptyRows).fill('<tr class="empty"><td>.</td><td class="c">.</td><td class="c">.</td><td>.</td></tr>').join("")}`
+      ${Array.from({length: emptyRows}, (_, j) => `<tr class="empty">
+        <td class="hand-desc" contenteditable="true" oninput="setHand(${j},'d',this.innerText)">${esc(handDesc[j]?.d || "")}</td>
+        <td class="c hand-desc" contenteditable="true" oninput="setHand(${j},'b',this.innerText)">${esc(handDesc[j]?.b || "")}</td>
+        <td class="c hand-desc" contenteditable="true" oninput="setHand(${j},'s',this.innerText)">${esc(handDesc[j]?.s || "")}</td>
+        <td class="hand-desc" contenteditable="true" oninput="setHand(${j},'p',this.innerText)">${esc(handDesc[j]?.p || "")}</td>
+      </tr>`).join("")}`
         : `<tr><th>Description</th><th>Montant</th></tr>
       ${rows.map((l) => `<tr><td>${esc(l.desc.toUpperCase())}</td><td>${fmt(parseFloat(String(l.amt).replace(",", ".")) || 0)}</td></tr>`).join("")}
-      ${Array(emptyRows).fill('<tr class="empty"><td>.</td><td>.</td></tr>').join("")}`}
+      ${Array.from({length: emptyRows}, (_, j) => `<tr class="empty">
+        <td class="hand-desc" contenteditable="true" oninput="setHand(${j},'d',this.innerText)">${esc(handDesc[j]?.d || "")}</td>
+        <td class="hand-desc" contenteditable="true" oninput="setHand(${j},'p',this.innerText)">${esc(handDesc[j]?.p || "")}</td>
+      </tr>`).join("")}`}
     </table>
 
     <div class="p-bottom" style="margin-top:10px">
@@ -899,7 +953,6 @@ function recordInvoice() {
   const n = parseInt(num, 10);
   if (!isNaN(n) && n > counter) counter = n;
   saveStore();
-  fillECClients();
   pushEntry(entry);
 }
 
@@ -979,8 +1032,6 @@ async function fullSync() {
     savedInvoices.forEach((x) => { const n = parseInt(x.num, 10); if (!isNaN(n) && n > maxN) maxN = n; });
     if (maxN > counter) counter = maxN;
     saveStore();
-    fillECClients();
-    if (view === "etat") paintEC();
     // Si le formulaire est vierge, proposer le prochain numéro libre
     const formVierge = !$("fClient").value && !lines.some((l) => l.desc || l.amt);
     if (formVierge) {
@@ -994,7 +1045,7 @@ async function fullSync() {
   } catch (e) { setSync("● Hors ligne", "#C22E21"); }
 }
 
-/* Pousse / supprime une facture individuelle (appelé par recordInvoice / delSaved) */
+/* Pousse / supprime une facture individuelle (appelé par recordInvoice) */
 async function pushEntry(entry) {
   if (!sb || !sbUser) return;
   try {
@@ -1011,15 +1062,12 @@ async function pushDelete(num) {
 }
 if (typeof window !== "undefined") window.addEventListener("online", () => fullSync());
 
-/* ————— Vues : Facture / État de compte ————— */
+/* ————— Vue : Facture ————— */
 let view = "facture";
 function showView(v) {
-  view = v;
-  $("viewFacture").style.display = v === "facture" ? "" : "none";
-  $("viewEtat").style.display = v === "etat" ? "" : "none";
-  $("tabFact").classList.toggle("on", v === "facture");
-  $("tabEC").classList.toggle("on", v === "etat");
-  if (v === "etat") { fillECClients(); paintEC(); }
+  view = "facture";
+  $("viewFacture").style.display = "";
+  $("tabFact").classList.add("on");
 }
 function nouvelleFacture() {
   showView("facture");
@@ -1030,119 +1078,9 @@ function doPrint() {
   window.print();
 }
 function doSave() {
-  if (view === "facture") {
-    recordInvoice();
-    const num = $("fNum").value || "facture";
-    savePDF("paper", (docType === "REÇU" ? "Recu" : "Estimation") + "-" + num + ".pdf");
-  } else {
-    const cl = $("ecClient").value || "client";
-    savePDFPages("#ecPages .ec-page", "EtatDeCompte-" + cl.replace(/[^A-Za-z0-9]+/g, "_") + "-" + $("ecMois").value + ".pdf");
-  }
-}
-
-/* ————— État de compte ————— */
-function fillECClients() {
-  const sel = $("ecClient");
-  const cur = sel.value;
-  const names = [...new Set([...CLIENTS.map((c) => c.nom.toUpperCase()), ...savedInvoices.map((x) => x.client).filter(Boolean)])];
-  sel.innerHTML = names.map((n) => `<option value="${esc(n)}">${esc(n)}</option>`).join("");
-  if (cur && names.includes(cur)) sel.value = cur;
-}
-function ecEntries() {
-  const cl = $("ecClient").value;
-  const mk = $("ecMois").value;
-  return savedInvoices
-    .filter((x) => x.type === "REÇU" && x.client === cl && x.monthKey === mk)
-    .sort((a, b) => String(a.num).localeCompare(String(b.num), "fr", { numeric: true }));
-}
-function delSaved(num) {
-  if (!confirm("Retirer la facture " + num + " de l'historique ?")) return;
-  savedInvoices = savedInvoices.filter((x) => x.num !== num);
-  saveStore();
-  paintEC();
-  pushDelete(num);
-}
-function moisDisplay(mk) {
-  const [y, m] = mk.split("-");
-  return (MOIS_FR[parseInt(m, 10) - 1] || "") + " " + y;
-}
-function paintEC() {
-  const cl = $("ecClient").value || "—";
-  const mk = $("ecMois").value;
-  const list = ecEntries();
-  const totalDu = list.reduce((s, x) => s + x.total, 0);
-  const clientInfo = CLIENTS.find((c) => c.nom.toUpperCase() === cl);
-  const PAR_PAGE = 20;
-
-  $("ecList").innerHTML = list.length
-    ? list.map((x) => `<div class="ec-item"><span class="n">#${esc(x.num)}</span> <span>${esc(x.date)}</span><span class="m">${fmt(x.total)} $</span><button class="del" onclick="delSaved('${esc(x.num)}')">✕</button></div>`).join("")
-    : `<div class="ec-empty">Aucun reçu enregistré pour ce client ce mois-ci. Enregistre ou imprime tes factures pis elles vont apparaître ici.</div>`;
-
-  // Découper en pages de 20 factures
-  const pages = [];
-  if (list.length === 0) pages.push([]);
-  else for (let i = 0; i < list.length; i += PAR_PAGE) pages.push(list.slice(i, i + PAR_PAGE));
-  const nb = pages.length;
-  const logoSrc = document.querySelector(".topbar img").src;
-
-  const tableHTML = (chunk, fill) => `
-    <table class="desc ec-compact">
-      <tr><th style="width:130px">Facture #</th><th>Date</th><th>Montant</th></tr>
-      ${chunk.map((x) => `<tr><td>${esc(x.num)}</td><td>${esc(x.date)}</td><td>${fmt(x.total)}</td></tr>`).join("")}
-      ${Array(Math.max(0, fill - chunk.length)).fill('<tr class="empty"><td>.</td><td>.</td><td>.</td></tr>').join("")}
-    </table>`;
-
-  $("ecPages").innerHTML = pages.map((chunk, idx) => {
-    const first = idx === 0;
-    const last = idx === nb - 1;
-    const header = first ? `
-    <div class="p-top">
-      <div>
-        <img src="${logoSrc}" alt="Carrosserie Principale" style="width:240px;max-width:50%;height:auto" />
-        <div class="p-addr" style="margin-top:8px; font-size:12.5px">${CO.addr1}<br>${CO.addr2}<br>${CO.tel}</div>
-      </div>
-      <div style="text-align:right">
-        <div class="p-doctype" style="font-size:34px">État de compte</div>
-        <div class="p-meta">
-          <table>
-            <tr><th class="blue-th">Période</th></tr>
-            <tr><td>${moisDisplay(mk)}</td></tr>
-          </table>
-        </div>
-      </div>
-    </div>
-    <div class="p-cols" style="grid-template-columns:1fr; max-width:55%; margin-top:12px">
-      <div class="p-col">
-        <div class="blue-th">Client</div>
-        <div class="p-body"><b>NOM :</b> ${esc(cl)}${clientInfo ? "\n\n<b>ADRESSE :</b> " + esc(clientInfo.addr) : ""}</div>
-      </div>
-    </div>` : `
-    <div class="p-top" style="align-items:center">
-      <img src="${logoSrc}" alt="Carrosserie Principale" style="width:200px;height:auto" />
-      <div style="text-align:right">
-        <div class="p-doctype" style="font-size:24px; margin-bottom:6px">État de compte (suite)</div>
-        <div style="font-size:12px; font-weight:700">${esc(cl)} · ${moisDisplay(mk)}</div>
-      </div>
-    </div>`;
-
-    const totals = last ? `
-    <div class="p-bottom">
-      <div>
-        <div class="p-merci">Merci pour votre confiance!</div>
-        <div class="p-tax-ids"><b>TPS</b> ${CO.tps}<br><b>TVQ</b> ${CO.tvq}</div>
-      </div>
-      <div class="totals">
-        <table>
-          <tr><td>NOMBRE DE FACTURES</td><td>${list.length}</td></tr>
-          <tr class="grand"><td>SOLDE DÛ (TAXES INCL.)</td><td>$ ${fmt(totalDu)}</td></tr>
-        </table>
-      </div>
-    </div>
-    <div class="p-foot" style="margin-top:12px; font-size:10.5px">Montants taxes incluses. Si vous avez des questions concernant cet état de compte, veuillez contacter ${CO.email}</div>` : "";
-
-    const fill = first && nb === 1 ? Math.min(8, PAR_PAGE) : 0; // remplissage léger si une seule page courte
-    return `<div class="paper ec-page">${header}${tableHTML(chunk, fill)}${totals}<div class="ec-pagenum">Page ${idx + 1} de ${nb}</div></div>`;
-  }).join("");
+  recordInvoice();
+  const num = $("fNum").value || "facture";
+  savePDF("paper", (docType === "ESTIMATION" ? "Estimation" : docType === "LAVE-AUTO" ? "Lavage" : "Recu") + "-" + num + ".pdf");
 }
 
 /* ——— Nouvelle facture : numéro suivant + date du jour, champs vidés ——— */
@@ -1151,8 +1089,9 @@ function resetForm() {
   saveStore();
   $("fNum").value = counter;
   $("fDate").value = todayFR();
-  ["fClient","fClientAddr","fMarque","fModele","fAnnee","fCouleur","fPlaque","fStock","fSerial"].forEach((id) => $(id).value = "");
+  ["fClient","fClientAddr","fClientTel","fMarque","fModele","fAnnee","fCouleur","fPlaque","fStock","fSerial"].forEach((id) => $(id).value = "");
   lines = [{ desc: "", bdt: "", stock: "", amt: "" }];
+  handDesc = {};
   clearPresetSel();
   renderLines();
   paint();
@@ -1165,10 +1104,8 @@ while (savedInvoices.some((x) => String(x.num) === String(counter))) counter += 
 $("fNum").value = counter;
 saveStore();
 $("fDate").value = todayFR();
-const now = new Date();
-$("ecMois").value = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0");
+loadClients();
 renderPresets();
-fillECClients();
 renderLines();
 paint();
 initSupabase();
