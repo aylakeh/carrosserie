@@ -681,7 +681,7 @@ async function savePDF(paperId, filename) {
 }
 
 /* Enregistre plusieurs pages (facture multi-pages / état de compte) dans un seul PDF */
-async function savePDFPages(selector, filename) {
+async function savePDFPages(selector, filename, token) {
   const els = Array.from(document.querySelectorAll(selector));
   if (!els.length) return;
   try {
@@ -701,6 +701,16 @@ async function savePDFPages(selector, filename) {
       if (drawH > availH) { drawH = availH; drawW = drawH * ratio; }
       const offX = margin + (availW - drawW) / 2;
       pdf.addImage(canvas.toDataURL("image/png"), "PNG", offX, margin, drawW, drawH);
+    }
+    /* Jeton invisible (texte blanc, minuscule, dans la marge du bas de la page 1) */
+    if (token) {
+      try {
+        pdf.setPage(1);
+        pdf.setFontSize(4);
+        pdf.setTextColor(255, 255, 255);
+        pdf.text(token, margin, pageH - 3);
+        pdf.setTextColor(0, 0, 0);
+      } catch (e) {}
     }
     pdf.save(filename || "document.pdf");
   } catch (e) {
@@ -752,9 +762,9 @@ function handTotal() {
 /* Recalcule et met à jour l'affichage du total en direct (sans perdre le curseur) */
 function recomputeTotals() {
   const formSub = lines.reduce((s, l) => s + (parseFloat(String(l.amt).replace(",", ".")) || 0), 0);
-  const sub = formSub + handTotal();
-  const tax = sub * (TPS + TVQ);
-  const tot = sub + tax;
+  const sub = Math.round((formSub + handTotal()) * 100) / 100;
+  const tax = Math.round(sub * (TPS + TVQ) * 100) / 100;
+  const tot = Math.round((sub + tax) * 100) / 100;
   const sEl = document.getElementById("tSub"); if (sEl) sEl.textContent = fmt(sub);
   const xEl = document.getElementById("tTax"); if (xEl) xEl.textContent = fmt(tax);
   const tEl = document.getElementById("tTot"); if (tEl) tEl.textContent = "$ " + fmt(tot);
@@ -865,9 +875,9 @@ function paint() {
   const vehLine = (arr) => arr.map(([k, v]) => `<b>${k}:</b> ${esc(v.toUpperCase())}`).join("<br>");
 
   const rows = lines.filter((l) => l.desc.trim() || (l.bdt || "").trim() || (l.stock || "").trim() || parseFloat(l.amt));
-  const subtotal = rows.reduce((s, l) => s + (parseFloat(String(l.amt).replace(",", ".")) || 0), 0) + handTotal();
-  const tax = subtotal * (TPS + TVQ);
-  const total = subtotal + tax;
+  const subtotal = Math.round((rows.reduce((s, l) => s + (parseFloat(String(l.amt).replace(",", ".")) || 0), 0) + handTotal()) * 100) / 100;
+  const tax = Math.round(subtotal * (TPS + TVQ) * 100) / 100;
+  const total = Math.round((subtotal + tax) * 100) / 100;
 
   /* Liste ordonnée de toutes les lignes de description : lignes du formulaire d'abord, puis lignes à écrire à la main */
   const descRows = [];
@@ -1007,8 +1017,9 @@ function recordInvoice() {
   const num = $("fNum").value.trim();
   if (!num) return;
   const rows = lines.filter((l) => l.desc.trim() || (l.bdt || "").trim() || (l.stock || "").trim() || parseFloat(l.amt));
-  const subtotal = Math.round(rows.reduce((s, l) => s + (parseFloat(String(l.amt).replace(",", ".")) || 0), 0) * 100) / 100;
-  const total = Math.round(subtotal * (1 + TPS + TVQ) * 100) / 100;
+  const subtotal = Math.round((rows.reduce((s, l) => s + (parseFloat(String(l.amt).replace(",", ".")) || 0), 0) + handTotal()) * 100) / 100;
+  const tax = Math.round(subtotal * (TPS + TVQ) * 100) / 100;
+  const total = Math.round((subtotal + tax) * 100) / 100;
   const vehParts = [$("fMarque").value, $("fModele").value, $("fAnnee").value].filter(Boolean).join(" ");
   const plaque = $("fPlaque").value.trim();
   let desc = vehParts ? (vehParts + (plaque ? " (" + plaque + ")" : "")).toUpperCase()
@@ -1153,7 +1164,17 @@ function doPrint() {
 function doSave() {
   recordInvoice();
   const num = $("fNum").value || "facture";
-  savePDFPages("#paper .paper", (docType === "ESTIMATION" ? "Estimation" : docType === "LAVE-AUTO" ? "Lavage" : "Recu") + "-" + num + ".pdf");
+  /* Jeton machine-lisible (texte invisible dans le PDF) : permet à l'État de compte
+     de relire le total exact au cent près, sans OCR ni Supabase. */
+  let token = "";
+  try {
+    const e = savedInvoices.find((x) => String(x.num) === String($("fNum").value));
+    if (e) {
+      const meta = { v: 1, num: e.num, type: e.type, date: e.date, client: e.client, subtotal: e.subtotal, total: e.total };
+      token = "[[CPJSON]]" + btoa(unescape(encodeURIComponent(JSON.stringify(meta)))) + "[[/CPJSON]]";
+    }
+  } catch (err) {}
+  savePDFPages("#paper .paper", (docType === "ESTIMATION" ? "Estimation" : docType === "LAVE-AUTO" ? "Lavage" : "Recu") + "-" + num + ".pdf", token);
 }
 
 /* ——— Nouvelle facture : numéro suivant + date du jour, champs vidés ——— */
