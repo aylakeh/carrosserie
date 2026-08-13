@@ -182,8 +182,11 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
         <select id="fClient"><option value="">Auto (selon les factures)</option></select>
       </div>
       <div class="fgroup">
-        <label for="fPeriode">Période</label>
-        <input type="month" id="fPeriode">
+        <label for="fDebut">Période (du / au)</label>
+        <div style="display:flex; gap:6px">
+          <input type="date" id="fDebut" style="flex:1" title="Début">
+          <input type="date" id="fFin" style="flex:1" title="Fin">
+        </div>
       </div>
     </div>
 
@@ -415,6 +418,29 @@ function fromRecord(rec, fileName){
            client: rec.client || '', descr: rec.descr || '',
            total: round2(rec.total), found: true, file: fileName };
 }
+/* Ligne bâtie à partir du jeton invisible du PDF (total exact, aucun OCR) */
+function fromMeta(meta, fileName){
+  return { id: ++seq, incl: true, num: meta.num || '', type: meta.type || '',
+           dateTxt: meta.date || '', monthKey: monthKeyFrom({ date_txt: meta.date || '' }),
+           client: meta.client || '', descr: '',
+           total: round2(meta.total), found: true, file: fileName };
+}
+/* Lit le jeton [[CPJSON]]…[[/CPJSON]] écrit par l'app de factures dans la couche texte du PDF */
+async function metaFromPdfToken(file){
+  try{
+    const pdf = await pdfjsLib.getDocument({data: await file.arrayBuffer()}).promise;
+    let txt = '';
+    for(let p=1; p<=Math.min(pdf.numPages,3); p++){
+      const tc = await (await pdf.getPage(p)).getTextContent();
+      txt += ' ' + tc.items.map(i=>i.str).join(' ');
+    }
+    const m = txt.match(/\[\[CPJSON\]\]([\s\S]*?)\[\[\/CPJSON\]\]/);
+    if(!m) return null;
+    const json = decodeURIComponent(escape(atob(m[1].replace(/\s+/g,''))));
+    const o = JSON.parse(json);
+    return (o && o.total != null) ? o : null;
+  }catch(_){ return null; }
+}
 function blankRow(numFact, fileName){
   const now = new Date();
   return { id: ++seq, incl: true, num: numFact || '', type: '',
@@ -442,15 +468,17 @@ async function ingest(files){
 
   const wanted = [];
   for(const f of fresh){
-    let n = numFromFilename(f.name);
+    const meta = await metaFromPdfToken(f);           // total exact écrit dans le PDF
+    let n = (meta && meta.num) ? String(meta.num) : numFromFilename(f.name);
     if(!n) n = await numFromPdfText(f);
-    wanted.push({file: f.name, num: n, blob: f, thumb: await thumbOf(f), url: URL.createObjectURL(f)});
+    wanted.push({file: f.name, num: n, meta, blob: f, thumb: await thumbOf(f), url: URL.createObjectURL(f)});
   }
   bar.style.width = '55%';
   txt.textContent = 'Récupération des montants…';
 
-  let records = [], authProblem = !token;
-  const nums = [...new Set(wanted.map(w=>w.num).filter(Boolean))];
+  // Supabase seulement pour les fichiers SANS jeton (secours), et seulement si connecté
+  let records = [], authProblem = false;
+  const nums = [...new Set(wanted.filter(w=>!w.meta).map(w=>w.num).filter(Boolean))];
   if(nums.length && token){
     try{ records = await sbFetchByNums(nums); }
     catch(err){ if(err.message === 'AUTH') authProblem = true; else txt.textContent = err.message; }
@@ -462,7 +490,9 @@ async function ingest(files){
   const created = [];
   wanted.forEach(w => {
     const rec = w.num ? byNum.get(String(w.num)) : null;
-    const row = rec ? fromRecord(rec, w.file) : blankRow(w.num, w.file);
+    const row = w.meta ? fromMeta(w.meta, w.file)      // 1) jeton exact du PDF
+              : rec    ? fromRecord(rec, w.file)        // 2) Supabase (secours)
+              :          blankRow(w.num, w.file);       // 3) rien → OCR
     row.thumb = w.thumb; row.url = w.url;
     rows.push(row); created.push({row, w});
   });
@@ -490,11 +520,13 @@ async function ingest(files){
   }
 
   bar.style.width = '100%';
-  const miss = wanted.filter(w => !byNum.get(String(w.num))).length;
+  const ocrCount = toRead.length;                       // fichiers sans jeton ni base → lus à l'image
+  const exact = created.length - ocrCount;              // fichiers avec total exact (jeton/base)
   const dupNote = skipped ? ` (${skipped} déjà présent${skipped>1?'s':''}, ignoré${skipped>1?'s':''})` : '';
-  txt.textContent = miss ? `${wanted.length - miss} de la base, ${miss} lue(s) à l'image — vérifie les montants.` + dupNote : `${wanted.length} facture(s) chargée(s).` + dupNote;
+  txt.textContent = ocrCount
+    ? `${exact} total(aux) exact(s), ${ocrCount} lu(s) à l'image — vérifie ces montants.` + dupNote
+    : `${created.length} facture(s) chargée(s) — montants exacts.` + dupNote;
   autoPeriode(); paint();
-  if(authProblem && miss){ loginMsg('Connecte-toi pour récupérer les montants.','err'); $('loginOverlay').classList.add('on'); }
   setTimeout(()=>{ prog.classList.remove('on'); bar.style.width = '0'; }, 2400);
 }
 
@@ -523,15 +555,20 @@ async function getOcrWorker(){
   ocrWorker = await Tesseract.createWorker('fra');
   return ocrWorker;
 }
-async function renderBig(file){
+async function renderBig(file, pageNum){
   const pdf = await pdfjsLib.getDocument({data: await file.arrayBuffer()}).promise;
-  const page = await pdf.getPage(1);
+  const page = await pdf.getPage(pageNum || 1);
   const base = page.getViewport({scale: 1});
   const v = page.getViewport({scale: Math.min(3, 1700 / base.width)});
   const c = document.createElement('canvas');
   c.width = v.width; c.height = v.height;
   await page.render({canvasContext: c.getContext('2d'), viewport: v}).promise;
   return c;
+}
+/* Nombre de pages d'un PDF (pour OCR multi-pages) */
+async function pdfPageCount(file){
+  try{ const pdf = await pdfjsLib.getDocument({data: await file.arrayBuffer()}).promise; return pdf.numPages; }
+  catch(_){ return 1; }
 }
 function amountFrom(str){
   const m = String(str).match(/-?[\d][\d\s\u00a0.,]*/);
@@ -620,17 +657,47 @@ function parseOcr(txt){
 }
 async function ocrFile(file){
   try{
-    const canvas = await renderBig(file);
     const worker = await getOcrWorker();
-    const { data } = await worker.recognize(canvas);
-    return parseOcr(data.text || '');
+    const nb = await pdfPageCount(file);
+    let full = '';
+    for(let p = 1; p <= nb; p++){
+      const canvas = await renderBig(file, p);
+      const { data } = await worker.recognize(canvas);
+      full += '\n' + (data.text || '');
+    }
+    return parseOcr(full);
   }catch(err){ return null; }
 }
 
 /* ————— Sélection ————— */
+const MOIS_MIN = ["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"];
+/* "2026-07-17" → "17 juillet 2026" */
+function frDate(iso){
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || '');
+  if(!m) return '';
+  return parseInt(m[3],10) + ' ' + (MOIS_MIN[parseInt(m[2],10)-1] || '') + ' ' + m[1];
+}
+/* "17 JUILLET 2026" → "2026-07-17" (pour les champs date) */
+function isoFromTxt(txt){
+  const t = deacc(txt || '');
+  const m = t.match(/(\d{1,2})\s+([A-Z]+)\s+(\d{4})/);
+  if(!m) return '';
+  const idx = MOIS_FR.findIndex(x => deacc(x) === m[2]);
+  if(idx < 0) return '';
+  return `${m[3]}-${String(idx+1).padStart(2,'0')}-${String(parseInt(m[1],10)).padStart(2,'0')}`;
+}
+/* Étiquette affichée sur le document */
+function periodeLabel(){
+  const d = $('fDebut').value, f = $('fFin').value;
+  if(d && f) return 'Du ' + frDate(d) + ' au ' + frDate(f);
+  if(d) return 'À partir du ' + frDate(d);
+  if(f) return "Jusqu'au " + frDate(f);
+  return '—';
+}
+/* Remplit automatiquement l'intervalle selon la 1re et la dernière facture déposée */
 function autoPeriode(){
-  const keys = [...new Set(rows.map(r=>r.monthKey).filter(Boolean))].sort();
-  if(keys.length) $('fPeriode').value = keys[keys.length-1];
+  const iso = rows.map(r => isoFromTxt(r.dateTxt)).filter(Boolean).sort();
+  if(iso.length){ $('fDebut').value = iso[0]; $('fFin').value = iso[iso.length-1]; }
 }
 function visible(){
   const cl = $('fClient').value;
@@ -708,7 +775,7 @@ function paintDoc(){
   });
   if(!byClient.size) byClient.set($('fClient').value || '—', []);
 
-  const periode = $('fPeriode').value ? moisDisplay($('fPeriode').value) : '—';
+  const periode = periodeLabel();
 
   const tableHTML = (chunk, fill) => `
     <table class="desc ec-compact">
@@ -731,7 +798,7 @@ function paintDoc(){
       const header = first ? `
     <div class="p-top">
       <div>
-        <img src="${logoSrc}" alt="Carrosserie Principale" style="width:240px;max-width:50%;height:auto" />
+        <img src="${logoSrc}" alt="Carrosserie Principale" style="width:330px;max-width:60%;height:auto" />
         <div class="p-addr" style="margin-top:8px; font-size:12.5px">${CO.addr1}<br>${CO.addr2}<br>${CO.tel}</div>
       </div>
       <div style="text-align:right">
@@ -820,7 +887,8 @@ $('ecList').addEventListener('click', e => {
   }
 });
 $('fClient').addEventListener('input', paint);
-$('fPeriode').addEventListener('input', paintDoc);
+$('fDebut').addEventListener('input', paintDoc);
+$('fFin').addEventListener('input', paintDoc);
 $('allOn').onclick = () => { visible().forEach(r => r.incl = true); paint(); };
 $('allOff').onclick = () => { visible().forEach(r => r.incl = false); paint(); };
 $('manualBtn').onclick = () => { rows.push(blankRow('','Ligne manuelle')); paint(); };
@@ -842,8 +910,7 @@ window.addEventListener('dragover', e => e.preventDefault());
 window.addEventListener('drop', e => e.preventDefault());
 
 /* ————— Init ————— */
-const now = new Date();
-$('fPeriode').value = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+/* Les champs de date se remplissent tout seuls quand des factures sont déposées (autoPeriode) */
 token = store.get('cp_tok'); userEmail = store.get('cp_mail');
 setAuthUI(false);
 (async () => {
