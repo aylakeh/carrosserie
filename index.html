@@ -671,7 +671,7 @@ async function savePDF(paperId, filename) {
     let drawW = availW, drawH = drawW / ratio;
     if (drawH > availH) { drawH = availH; drawW = drawH * ratio; }
     const offX = margin + (availW - drawW) / 2;
-    pdf.addImage(canvas.toDataURL("image/png"), "PNG", offX, margin, drawW, drawH);
+    pdf.addImage(canvas.toDataURL("image/jpeg", 0.85), "JPEG", offX, margin, drawW, drawH);
     pdf.save(filename || "document.pdf");
   } catch (e) {
     alert("Le téléchargement PDF n'a pas fonctionné ici. Utilise « Imprimer » puis choisis « Enregistrer au format PDF ».");
@@ -700,7 +700,7 @@ async function savePDFPages(selector, filename, token) {
       let drawW = availW, drawH = drawW / ratio;
       if (drawH > availH) { drawH = availH; drawW = drawH * ratio; }
       const offX = margin + (availW - drawW) / 2;
-      pdf.addImage(canvas.toDataURL("image/png"), "PNG", offX, margin, drawW, drawH);
+      pdf.addImage(canvas.toDataURL("image/jpeg", 0.85), "JPEG", offX, margin, drawW, drawH);
     }
     /* Jeton invisible (texte blanc, minuscule, dans la marge du bas de la page 1) */
     if (token) {
